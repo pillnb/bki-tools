@@ -1,13 +1,8 @@
 /**
  * Express handler untuk Vercel Functions
- * Berjalan di /api/[[...slugs]].ts tanpa app.listen()
+ * Berjalan di /api/[[...slug]].ts tanpa app.listen()
  * 
- * Cara menggunakan:
- * 1. Copy file ini ke api/[[...slugs]].ts di project Anda
- * 2. Setup DATABASE_URL di Vercel environment variables
- * 3. Deploy ke Vercel
- * 
- * File akan menangani:
+ * Menangani:
  * - /api/trpc - tRPC endpoints
  * - /api/oauth/callback - OAuth routes
  * - /api/health - Health check
@@ -19,7 +14,6 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { registerOAuthRoutes } from "./oauth";
-import { getDbConnection, isDbHealthy } from "./db-connection";
 
 // Inisialisasi Express app sekali saja (di-cache oleh Vercel)
 const app = express();
@@ -50,11 +44,12 @@ app.use((req: Request, res: Response, next: express.NextFunction) => {
 });
 
 // Health check endpoint
-app.get("/api/health", async (req: Request, res: Response) => {
+app.get("/health", async (req: Request, res: Response) => {
+  const { isDbHealthy } = await import("./db-connection");
   try {
-    const isHealthy = await isDbHealthy();
-    res.status(isHealthy ? 200 : 503).json({
-      status: isHealthy ? "healthy" : "unhealthy",
+    const healthy = await isDbHealthy();
+    res.status(healthy ? 200 : 503).json({
+      status: healthy ? "healthy" : "unhealthy",
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -66,12 +61,9 @@ app.get("/api/health", async (req: Request, res: Response) => {
   }
 });
 
-// Initialize DB connection pada startup
-getDbConnection().catch(console.error);
-
 // tRPC routes
 app.use(
-  "/api/trpc",
+  "/trpc",
   createExpressMiddleware({
     router: appRouter,
     createContext,
@@ -83,7 +75,12 @@ registerOAuthRoutes(app);
 
 // 404 handler
 app.use((req: Request, res: Response) => {
-  res.status(404).json({ error: "Not found" });
+  console.warn(`[404] ${req.method} ${req.path}`);
+  res.status(404).json({
+    error: "Not found",
+    path: req.path,
+    method: req.method,
+  });
 });
 
 // Error handler
@@ -94,15 +91,17 @@ app.use(
     res: Response,
     next: express.NextFunction
   ) => {
-    console.error("[API Error]", err);
-    res.status(500).json({
-      error: process.env.NODE_ENV === "production" ? "Internal error" : err.message,
-    });
+    console.error("[Express Error]", err);
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: process.env.NODE_ENV === "production" ? "Internal error" : err.message,
+      });
+    }
   }
 );
 
 /**
- * Vercel Functions / Node.js handler
+ * Vercel Functions Handler
  * Semua request HTTP masuk melalui sini
  */
 export default async function handler(

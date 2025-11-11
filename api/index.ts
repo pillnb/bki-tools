@@ -1,43 +1,46 @@
 /**
- * Vercel Functions Entry Point
+ * Vercel Functions - Root API Handler
  * 
- * File ini menjadi handler untuk semua request ke `/api/*`
- * 
- * Setup:
- * 1. Copy file ini ke `api/index.ts` di root project
- * 2. Pastikan `server/` folder tersedia (sibling dengan `client/`)
- * 3. Set DATABASE_URL di Vercel environment variables
- * 4. Deploy
+ * Handles requests to /api and /api/
  */
 
 import "dotenv/config";
 import type { Request, Response } from "express";
-import { getDbConnection } from "../server/_core/db-connection";
+import { getDbConnection, isDbHealthy } from "../server/_core/db-connection";
 
-// Initialize DB connection on startup
+// Initialize DB connection
 getDbConnection().catch((error) => {
   console.error("[API Init] Failed to initialize database:", error);
 });
 
-// Import handler
-import handler from "../server/_core/vercel-handler";
-
 /**
- * Default export untuk Vercel Functions
+ * Root API handler - Simple health check at /api
  */
-export default async function apiHandler(req: Request, res: Response) {
-  // Log incoming request (development only)
-  if (process.env.NODE_ENV !== "production") {
-    console.log(`[API] ${req.method} ${req.url}`);
-  }
+export default async function apiRootHandler(req: Request, res: Response) {
+  console.log(`[API Root] ${req.method} ${req.url}`);
 
   try {
-    // Delegate ke Express handler
-    return await handler(req, res);
+    if (req.url === "/" || req.url === "") {
+      // Health check at /api
+      const isHealthy = await isDbHealthy();
+      return res.status(isHealthy ? 200 : 503).json({
+        status: isHealthy ? "healthy" : "unhealthy",
+        message: "API Root - Health Check",
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // All other requests should go through [[...slug]].ts
+    res.status(404).json({
+      error: "Not found",
+      path: req.url,
+      timestamp: new Date().toISOString(),
+    });
   } catch (error) {
-    console.error("[API Handler Error]", error);
+    console.error("[API Root Error]", error);
     res.status(500).json({
       error: "Internal server error",
+      message: error instanceof Error ? error.message : "Unknown error",
       timestamp: new Date().toISOString(),
     });
   }

@@ -5,26 +5,9 @@
     "NODE_ENV": "production"
   },
   "functions": {
-    "api/index.ts": {
+    "api/**/*.ts": {
       "memory": 512,
       "maxDuration": 30
     }
-  },
-  "headers": [
-    {
-      "source": "/api/:path*",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store"
-        }
-      ]
-    }
-  ],
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "/api/index.ts?url=:path*"
-    }
-  ]
+  }
 }
